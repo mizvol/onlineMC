@@ -1,9 +1,9 @@
-function [Lr, Sp, G1, G2, U, S, V] = gsp_fastmc_2g_online_knn(X, M, gamma1, gamma2, Ninit, batch, iters, G1, G2, param)
+function [Lr, Sp, G1, G2, U, S, V] = gsp_frpcag_2g_online_knn2(X, gamma1, gamma2, Ninit, batch, iters, G1, G2, param)
 %GSP_FASTMC_2G_ONLINE Fast online matrix completion on 2 graphs
-%   Usage: [Lr] = gsp_fastmc_2g_online(X, M, gamma1, gamma2, G1, G2)
-%          [Lr] = gsp_fastmc_2g_online(X, M, gamma1, gamma2, G1, G2, param)
-%          [Lr, Sp, G1, G2] = gsp_fastmc_2g_online( ... );
-%          [Lr, Sp, G1, G2, U, S, V] = gsp_fastmc_2g_online( ... );
+%   Usage: [Lr] = gsp_fastmc_2g_online_knn2(X, M, gamma1, gamma2, G1, G2)
+%          [Lr] = gsp_fastmc_2g_online_knn2(X, M, gamma1, gamma2, G1, G2, param)
+%          [Lr, Sp, G1, G2] = gsp_fastmc_2g_online_knn2( ... );
+%          [Lr, Sp, G1, G2, U, S, V] = gsp_fastmc_2g_online_knn2( ... );
 %
 %   Input parameters:
 %       X       : Input data (matrix of double)
@@ -45,7 +45,7 @@ function [Lr, Sp, G1, G2, U, S, V] = gsp_fastmc_2g_online_knn(X, M, gamma1, gamm
 
 %% Optional parameters
 
-if nargin<10
+if nargin<9
     param = struct;
 end
 
@@ -79,13 +79,13 @@ end
 %% initial small batch part
 
 % solve the initial batch part
-f1.grad = @(x,T) 2*M(:,1:Ninit).*(x-X(:,1:Ninit));
-f1.beta = 2;
-f1.eval = @(x) norm(M(:,1:Ninit).*(x-X(:,1:Ninit)),'fro');
+paraml1.verbose = 2;
+paraml1.y = X(1:Ninit,1:Ninit);
+f1.prox = @(x,T) prox_l1(x,T,paraml1);
+f1.eval = @(x) norm(x(:),1);
 
-%G1_small = gsp_nn_graph(X(:,1:Ninit),'normalized');
-G1_small = gsp_nn_graph(X(:,1:Ninit));
-G1_small = gsp_estimate_lmax(G1_small);
+G1_small.L = G1.L(1:Ninit,1:Ninit);
+G1_small.lmax = G1.lmax;
 G2_small.L = G2.L(1:Ninit,1:Ninit);
 G2_small.lmax = G2.lmax;
 
@@ -97,40 +97,33 @@ f4.grad = @(x) gamma2*(2*x*G2_small.L);
 f4.eval = @(x) gamma2*sum(gsp_norm_tik(G2_small,x'));
 f4.beta = 2*gamma2*G2_small.lmax;
 
-Lr = solvep(X(:,1:Ninit),{f1,f3,f4},param.param_solver);
-Lr = [Lr zeros(size(Lr,1),size(X,2)-Ninit)];
+Lr = solvep(X(1:Ninit,1:Ninit),{f1,f3,f4},param.param_solver);
+% Lr = [Lr ; zeros(size(X,1)-Ninit,size(Lr,2))];
+% Lr = [Lr zeros(size(Lr,1),size(X,2)-Ninit)];
 param.param_solver.maxit = iters;
 %% online update part
-temp_size = [];
+tempr_size = [];
+tempc_size = [];
 for i = 1 : batch : size(X,2) - Ninit
     
-%     G1new = gsp_nn_graph(X(:,1:Ninit+i+batch-1));
-%     G1new = gsp_estimate_lmax(G1new);
-    G1new = G1_small;
-    
-    indices_knn = [];
-    Linit = [];
+    %%  update the new rows
+    indicesr_knn = [];
     for j = 1 : batch
-        [temp, temp_ind] = sort(full(G2.W(1:Ninit+i+j-1,Ninit+i+j-1)),'descend');
-        indices_knn = union(indices_knn,temp_ind(temp~=0));
-        val_temp = temp(temp_ind(temp~=0) < Ninit+i);
-%         if ~isempty(val_temp)
-%         Linit = [Linit sum(Lr(:,1:length(val_temp)).*repmat(val_temp',...
-%             size(Lr,1),1),2)/sum(val_temp)];
-%         else 
-%             Linit = [Linit X(:,Ninit+i+j-1)];
-%         end
-         Linit = [Linit X(:,Ninit+i+j-1)];
+        [temp, temp_ind] = sort(full(G1.W(1:Ninit+i+j-1,Ninit+i-1)),'descend');
+        indicesr_knn = union(indicesr_knn,temp_ind(temp~=0));
     end
-    indices_knn = union(indices_knn,[Ninit+i:Ninit+i+batch-1]);
-    temp_size = [temp_size length(indices_knn)];
+    indicesr_knn = union(indicesr_knn,[Ninit+i:Ninit+i+batch-1]);
+    tempr_size = [tempr_size length(indicesr_knn)];
     
-    G2new.L = G2.L(indices_knn,indices_knn);
+    G1new.L = G1.L(indicesr_knn,indicesr_knn);
+    G1new.lmax = G1.lmax;
+    
+    G2new.L = G2.L(1:Ninit+i-1,1:Ninit+i-1);
     G2new.lmax = G2.lmax;
     
-    f1.grad = @(x,T) 2*M(:,indices_knn).*(x-X(:,indices_knn));
-    f1.beta = 2;
-    f1.eval = @(x) norm(M(:,indices_knn).*(x-X(:,indices_knn)),'fro');
+    paraml1.y = X(indicesr_knn,1:Ninit+i-1);
+    f1.prox = @(x,T) prox_l1(x,T,paraml1);
+    f1.eval = @(x) norm(x(:),1);
     
     f3.grad = @(x) gamma1*2*G1new.L*x;
     f3.eval = @(x) gamma1*sum(gsp_norm_tik(G1new,x));
@@ -140,26 +133,56 @@ for i = 1 : batch : size(X,2) - Ninit
     f4.eval = @(x) gamma2*sum(gsp_norm_tik(G2new,x'));
     f4.beta = 2*gamma2*G2new.lmax;
     
-    Lrtemp = solvep([X(:,indices_knn(1:end-batch)) Linit],{f1,f3,f4},param.param_solver);
-    %Lrtemp = solvep([Lr(:,indices_knn(1:end-batch)) X(:,Ninit+i:Ninit+i+batch-1)],{f1,f3,f4},param.param_solver);
-    Lr(:,indices_knn) = Lrtemp;
+    Lrtemp = solvep(X(indicesr_knn,:),{f1,f3,f4},param.param_solver);
+    
+%     Lrtemp = solvep([Lr(indicesr_knn(1:end-batch),1:Ninit+i-1)...
+%         ; X(Ninit+i:Ninit+i+batch-1,1:Ninit+i-1)],{f1,f3,f4},param.param_solver);
+    
+    if ~isempty(indicesr_knn)
+        Lr(indicesr_knn(indicesr_knn < Ninit+i),:) = Lrtemp(1:end-batch,:);
+    end
+    Lr = [Lr ; Lrtemp(end-batch+1:end,:)];
+    
+    %%
+    % update the new columns
+    indicesc_knn = [];
+    for j = 1 : batch
+        [temp, temp_ind] = sort(full(G2.W(1:Ninit+i-1,Ninit+i+j-1)),'descend');
+        indicesc_knn = union(indicesc_knn,temp_ind(temp~=0));
+    end
+    indicesc_knn = union(indicesc_knn,[Ninit+i:Ninit+i+batch-1]);
+    tempc_size = [tempc_size length(indicesc_knn)];
+    
+    G2new.L = G2.L(indicesc_knn,indicesc_knn);
+    G2new.lmax = G2.lmax;
+    
+    G1new.L = G1.L(1:Ninit+i+batch-1,1:Ninit+i+batch-1);
+    G1new.lmax = G1.lmax;
+    
+    % solve the optimization
+    paraml1.y = X(1:Ninit+i-1,indicesc_knn);
+    f1.prox = @(x,T) prox_l1(x,T,paraml1);
+    f1.eval = @(x) norm(x(:),1);
+    
+    f3.grad = @(x) gamma1*2*G1new.L*x;
+    f3.eval = @(x) gamma1*sum(gsp_norm_tik(G1new,x));
+    f3.beta = 2*gamma1*G1new.lmax;
+    
+    f4.grad = @(x) gamma2*(2*x*G2new.L);
+    f4.eval = @(x) gamma2*sum(gsp_norm_tik(G2new,x'));
+    f4.beta = 2*gamma2*G2new.lmax;
+    
+    Lrtemp = solvep(X(:,indicesc_knn) ,{f1,f3,f4},param.param_solver);
+    
+    %Lrtemp = solvep([Lr(:,indicesc_knn(1:end-batch)) X(1:Ninit+i+batch-1,Ninit+i:Ninit+i+batch-1)]...
+      %  ,{f1,f3,f4},param.param_solver);
+    
+    if ~isempty(indicesc_knn)
+        Lr(:,indicesc_knn(indicesc_knn < Ninit+i)) = Lrtemp(:,1:end-batch);
+    end
+    
+    Lr = [Lr Lrtemp(:,end-batch+1:end)];
 end
-
-%% final global update
-% param.param_solver.maxit = 50;
-% f1.grad = @(x,T) 2*M.*(x-X);
-% f1.beta = 2;
-% f1.eval = @(x) norm(M.*(x-X),'fro');
-% 
-% f3.grad = @(x) gamma1*2*G1.L*x;
-% f3.eval = @(x) gamma1*sum(gsp_norm_tik(G1,x));
-% f3.beta = 2*gamma1*G1.lmax;
-% 
-% f4.grad = @(x) gamma2*(2*x*G2.L);
-% f4.eval = @(x) gamma2*sum(gsp_norm_tik(G2,x'));
-% f4.beta = 2*gamma2*G2.lmax;
-% 
-% Lr = solvep(Lr,{f1,f3,f4},param.param_solver);
 
 Sp = X - Lr;
 %% Optional output parameters

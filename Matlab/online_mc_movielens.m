@@ -1,6 +1,6 @@
 
 clear
-%close all
+close all
 
 %% movielens
 load 'ml-10M_small_40.mat';
@@ -26,11 +26,11 @@ X_noisy = Xtrain + 0.2*randn(size(X,1),size(X,2)).*mask_train;
 gamma =[0.5 0.5]*0.2;
 Ninit = 20;
 batch = 20;
-iters = 10;
+iters = 100;
 a_final = [1:size(X,2)];
 
 T_gctp = X_noisy;
-for i = 1 : 5
+for i = 1 : 10
     a = randperm(size(T_gctp,2));
     mask_train = mask_train(:,a);
     mask_test = mask_test(:,a);
@@ -38,7 +38,7 @@ for i = 1 : 5
     T_gctp = T_gctp(:,a);
     Xtest = Xtest(:,a);
     T_gctp(logical(mask_train)) = X_noisy(logical(mask_train));
-    T_gctp = gsp_fastmc_2g_online_knn(T_gctp, mask_train, gamma(1),gamma(2), Ninit, batch, iters, 0,0);
+    T_gctp = gsp_fastmc_2g_online_knn2(T_gctp, mask_train, gamma(1),gamma(2), Ninit, batch, iters, 0,0);
     a_final = a_final(a);
 end
 
@@ -58,14 +58,14 @@ figure; subplot(131); imagesc(X_noisy); title('actual noisy matrix');
 subplot(132); imagesc(T_gctp); title(['online knn update: error =' num2str(rmse(A,B))]);
 
 %% run the online matrix completion with full update
-gamma =[0.5 0.5]*0.5;
-Ninit = 100;
-batch = 1;
-iters = 1;
-T_gctp = gsp_fastmc_2g_online(X_noisy, mask_train, gamma(1),gamma(2), Ninit, batch, iters);
-
-T_gctp = lin_map(T_gctp, y_lims_init); B = T_gctp.*mask_test;  
-A(A == 0) = nan; 
-disp(['RMSE:' num2str( rmse(A,B))])
-subplot(133); imagesc(T_gctp); title(['full online update: error =' num2str(rmse(A,B))]);
+% gamma =[0.5 0.5]*0.5;
+% Ninit = 100;
+% batch = 1;
+% iters = 1;
+% T_gctp = gsp_fastmc_2g_online(X_noisy, mask_train, gamma(1),gamma(2), Ninit, batch, iters);
+% 
+% T_gctp = lin_map(T_gctp, y_lims_init); B = T_gctp.*mask_test;  
+% A(A == 0) = nan; 
+% disp(['RMSE:' num2str( rmse(A,B))])
+% subplot(133); imagesc(T_gctp); title(['full online update: error =' num2str(rmse(A,B))]);
 

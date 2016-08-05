@@ -24,6 +24,9 @@ Xtest = X - Xtrain;
 
 X_noisy = Xtrain + 0.2*randn(size(X,1),size(X,2)).*mask_train;
 
+%%
+% gamma1 = 0.2; gamma2 = 0.2;
+% [T_gctp, G1, G2, Eval] = gsp_sgd_fastmc(X_noisy, mask_train, gamma1, gamma2, 0, 0, 10, 5);
 %% offline
 % gamma =[0.5 0.5];
 % T_gctp = gsp_fastmc_2g(X_noisy, mask_train, gamma(1),gamma(2),0,0);
@@ -45,7 +48,7 @@ X_noisy = Xtrain + 0.2*randn(size(X,1),size(X,2)).*mask_train;
 % subplot(132); imagesc(T_gctp); title(['online knn update: error =' num2str(rmse(A,B))]);
 
 %%
-gamma =[0.5 0.5]*0.1;
+gamma =[0.5 0.5]*0.2;
 Ninit = 10;
 batch = 10;
 iters = 10;
@@ -60,7 +63,7 @@ for i = 1 : 5
     T_gctp = T_gctp(:,a);
     Xtest = Xtest(:,a);
     T_gctp(mask_train) = X_noisy(mask_train);
-    T_gctp = gsp_fastmc_2g_online_knn(T_gctp, mask_train, gamma(1),gamma(2), Ninit, batch, iters, 0,0);
+    T_gctp = gsp_fastmc_2g_online_knn2(T_gctp, mask_train, gamma(1),gamma(2), Ninit, batch, iters, 0,0);
     a_final = a_final(a);
 end
 
